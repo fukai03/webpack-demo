@@ -1,0 +1,1 @@
+"use strict";(self.webpackChunkwebpack_test_code=self.webpackChunkwebpack_test_code||[]).push([[569],{569:(e,c,s)=>{s.r(c),s.d(c,{default:()=>o}),console.log("该模块被加载");const o=()=>{console.log("点击按钮!")}}}]);
