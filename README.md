@@ -888,3 +888,328 @@ module.exports = {
 * preload (预加载)：提前加载后面会用到的关键资源
 因为会提前拉取资源，如果不是特殊需要，谨慎使用
 * [官网示例](https://webpack.docschina.org/guides/code-splitting/#prefetchingpreloading-modules)
+
+### 配置一般流程
+demo11
+* 初始化项目
+```
+demo11
+    ├── src
+    |    └── index.js
+    ├── package.json
+    ├── webpack.config.js
+```
+* 安装webpack
+```
+npm install webpack webpack-cli -D
+```
+* index.js中写入内容
+
+```js
+class Test {
+    constructor() {
+        console.log('test');
+        document.write('test')
+    }
+}
+new Test()
+```
+* 配置babel-loader
+  * 安装
+
+```bash
+npm install babel-loader @babel/core @babel/preset-env @babel/plugin-transform-runtime  @babel/plugin-proposal-decorators  @babel/plugin-proposal-class-properties @babel/plugin-proposal-private-methods -D
+# and
+npm install @babel/runtime @babel/runtime-corejs3 -s
+```
+* 配置webpack文件
+
+```js
+const path = require('path');
+
+module.exports = {
+  entry: './src/index.js',
+  output: {
+    path: path.resolve(__dirname, 'dist'),
+    filename: 'bundle.[contenthash:8].js',
+    clean: true, // 每次打包前清除上次构建的产物，只保留本次打包结果
+  },
+  module: {
+    rules: [
+      {
+        test: /\.(jsx|js)$/,
+        use: 'babel-loader',
+        exclude: /node_modules/,
+      },
+    ]
+  }
+}
+```
+* 配置babelrc文件
+
+```
+{
+    "presets": ["@babel/preset-env"],
+    "plugins": [
+        ["@babel/plugin-transform-runtime", {"corejs": 3}],
+        ["@babel/plugin-proposal-decorators", { "legacy": true }],
+        ["@babel/plugin-proposal-class-properties", { "loose": true }],
+        ["@babel/plugin-proposal-private-methods", { "loose": true }]，
+        ["@babel/plugin-proposal-private-property-in-object", { "loose": true }]
+    ]
+}
+```
+* 添加html插件，并在根路径下创建public/index.html作为静态资源
+
+```bash
+npm install html-webpack-plugin -D
+```
+```js
+// 省略 ...
+const HtmlWebpackPlugin = require('html-webpack-plugin');
+
+module.exports = {
+  // 省略 ...
+  plugins: [
+    new HtmlWebpackPlugin({
+      template: path.resolve(__dirname, './public/index.html'),
+      inject: 'body',
+      scriptLoading: 'blocking',
+    }),
+  ]
+}
+```
+* 安装webpack-dev-server，此时执行npm run dev即可在指定端口看到页面效果，且实时刷新
+  * devServer参考：
+    * https://webpack.docschina.org/configuration/dev-server/#root
+    * https://juejin.cn/post/6971237797734645767
+    * https://juejin.cn/post/6973825927708934174
+
+```bash
+npm install webpack-dev-server -D
+```
+```js
+// 省略 ...
+module.exports = {
+  // 省略 ...
+  devServer: {
+    port: 2023, // 默认是 8080
+    hot: true,
+    compress: true, // 是否启用 gzip 压缩
+    proxy: {
+      '/api': {
+        target: 'http://0.0.0.0:80',
+        pathRewrite: {
+          '/api': '',
+        },
+      },
+    },
+  },
+}
+{
+  "scripts": {
+    "build": "webpack",
+    "dev": "webpack serve --open"
+  },
+}
+```
+* sourcemap配置
+  * 开发环境 最佳： eval-cheap-module-source-map
+  * 生产环境 最佳： hidden-source-map
+
+* 拆分环境
+  * 开发过程中一般会有多个环境（开发、测试、生产等），不同环境下webpack的配置会有差异（如sourcemap配置），所以需要对配置进行拆分来对应不同的环境。
+  * 根路径下新增以下文件（公共配置：base，开发配置：dev，生产配置：pro）
+  + ├── build
+  + |    ├── webpack.base.js
+  + |    ├── webpack.dev.js
+  + |    ├── webpack.pro.js
+* （需将路径更换，否则打包或启动会报错）
+```js
+// webpack.base.js 公共配置
+const path = require('path');
+const HtmlWebpackPlugin = require('html-webpack-plugin');
+
+module.exports = {
+    entry: './src/index.js',
+    mode: 'development',
+    output: {
+        path: path.resolve(__dirname, 'dist'),
+        filename: 'bundle.[contenthash:8].js',
+        clean: true
+    },
+    module: {
+        rules: [
+            {
+                test: /\.(jsx|js)$/,
+                use: 'babel-loader',
+                exclude: /node_modules/,
+            },
+        ]
+    },
+    plugins: [
+        new HtmlWebpackPlugin({
+            template: path.resolve(rootDir, './public/index.html'),
+            inject: 'body',
+            scriptLoading: 'blocking'
+        })
+    ],
+}
+```
+```js
+// webpack.dev.js 开发环境配置
+const { merge } = require('webpack-merge');
+const baseConfig = require('./webpack.base');
+
+module.exports = merge(baseConfig, {
+    mode: 'development',
+    devtool: 'eval-cheap-module-source-map',
+    devServer: {
+        port: 2023,
+        hot: true,
+        compress: true, // 是否启用 gzip 压缩
+        proxy: {
+            '/api': {
+                target: 'http://0.0.0.0',
+                pathRewrite: {
+                    '/api': '',
+                },
+            },
+        },
+    },
+})
+```
+```js
+// webpack.pro.js 生产环境配置
+const { merge } = require('webpack-merge');
+const baseConfig = require('./webpack.base')
+
+module.exports = merge(baseConfig, {
+    mode: 'production',
+    devtool: 'hidden-source-map'
+});
+```
+* 修改package.json中的脚本命令
+
+```json
+    "build": "webpack --config build/webpack.pro.js",
+    "dev": "webpack serve --config build/webpack.dev.js --open"
+```
+* 添加样式loader（css、less）
+
+```bash
+npm install less style-loader css-loader less-loader -D
+```
+* 修改webpack.base.js
+
+```js
+// 省略...
+
+module.exports = {
+  // 省略...
+  module: {
+    rules: [
+      // 省略...
+      {
+        test: /\.(le|c)ss$/,
+        exclude: /node_modules/,
+        use: ['style-loader', 'css-loader', 'less-loader']
+      },
+    ]
+  },
+  // 省略...
+}
+```
+
+* 打包抽离css文件
+  *  安装插件mini-css-extract-plugin
+
+```bash
+npm install mini-css-extract-plugin -D
+```
+* 修改 webpack.base.js 配置文件，注意：需将loader中的style-loader替换为MiniCssExtractPlugin.loader，否则会报错，打包后即可看到样式文件被抽离出来。
+
+```js
+//...
+const MiniCssExtractPlugin = require('mini-css-extract-plugin');
+
+
+module.exports = {
+// ...
+    module: {
+        rules: [
+// ...
+            {
+                test: /\.(le|c)ss$/,
+                exclude: /node_modules/,
+                use: [
+                    MiniCssExtractPlugin.loader,
+                    'css-loader',
+                    'less-loader'
+                ]
+            },
+        ]
+    },
+    plugins: [
+// ...
+        new MiniCssExtractPlugin({
+            filename: 'css/[name].css'
+        })
+    ],
+}
+```
+
+* 压缩打包后的css文件（注意：webpack4 与webpack5 压缩的插件不同）
+webpack4
+* 安装 optimize-css-assets-webpack-plugin 插件，并修改webpack.config.js
+
+```bash
+npm install optimize-css-assets-webpack-plugin -D
+```
+```js
+// 省略...
+const OptimizeCssPlugin = require('optimize-css-assets-webpack-plugin');
+
+module.exports = {
+  // 省略...
+  plugins: [
+    // 省略...
+    new OptimizeCssPlugin(),
+  ],
+}
+```
+
+webpack5
+* 安装css-minimizer-webpack-plugin，并修改webpack.config.js
+
+```bash
+npm install css-minimizer-webpack-plugin -D
+```
+```js
+// 省略...
+const CssMinimizerPlugin = require("css-minimizer-webpack-plugin");
+
+module.exports = {
+  // 省略...
+    optimization: {
+        minimizer: [
+            new CssMinimizerPlugin()
+        ]
+    },
+}
+```
+* webpack5文件加载（图片、字体等），并修改webpack.config.js（webpack4需要安装raw-loader、url-loader、file-loader）
+
+```js
+// 省略...
+rules: [
+    {
+        test: /\.(png|jpg|gif|jpeg|webp|svg|eot|ttf|woff|woff2)$/,
+        type: 'asset',
+    },
+]
+```
+相关文章推荐
+* https://juejin.cn/post/7160875688260534279
+* https://umijs.org/blog/mfsu-faster-than-vite
+* https://juejin.cn/post/6982361231071903781

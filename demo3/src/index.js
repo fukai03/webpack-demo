@@ -1,5 +1,6 @@
 import _ from 'lodash';
 import printMe from './print.js';
+import { debounce, throttle } from 'lodash-es'
 
 function component() {
     const element = document.createElement('div');
@@ -8,7 +9,7 @@ function component() {
     element.innerHTML = _.join(['Hello', 'webpack'], ' ');
 
     btn.innerHTML = '点我进行打印!';
-    btn.onclick = printMe;
+    btn.onclick = throttle(printMe,3000);
 
     element.appendChild(btn);
 
